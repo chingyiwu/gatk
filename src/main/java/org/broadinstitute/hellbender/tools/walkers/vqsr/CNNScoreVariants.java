@@ -315,7 +315,6 @@ public class CNNScoreVariants extends TwoPassVariantWalker {
 
     }
 
-    @Override
     public void firstPassApply(final VariantContext variant, final ReadsContext readsContext, final ReferenceContext referenceContext, final FeatureContext featureContext) {
         referenceContext.setWindow(windowStart, windowEnd);
         if (tensorType.isReadsRequired()) {
