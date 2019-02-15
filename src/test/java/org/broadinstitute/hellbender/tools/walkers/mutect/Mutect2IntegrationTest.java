@@ -175,18 +175,20 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
     @Test
     public void testNA12878NormalNormalFiltering() throws Exception {
         Utils.resetRandomGenerator();
-        final File unfilteredVcf = new File(FILTERING_DIR, "NA12878.vcf");
-        final File contamination = new File(FILTERING_DIR, "contamination.table");
-        final File segments = new File(FILTERING_DIR, "segments.table");
-        final File stats = new File(FILTERING_DIR, "merged.stats");
+        final File unfilteredVcf = new File("/Users/davidben/Desktop/debug/unfiltered.vcf");
+        final File stats = new File("/Users/davidben/Desktop/debug/merged.stats");
+        //final File unfilteredVcf = new File(FILTERING_DIR, "NA12878.vcf");
+        //final File contamination = new File(FILTERING_DIR, "contamination.table");
+        //final File segments = new File(FILTERING_DIR, "segments.table");
+        //final File stats = new File(FILTERING_DIR, "merged.stats");
 
         final File filteredVcf = createTempFile("filtered", ".vcf");
 
         // run FilterMutectCalls
         new Main().instanceMain(makeCommandLineArgs(Arrays.asList(
                 "-V", unfilteredVcf.getAbsolutePath(), "-O", filteredVcf.getAbsolutePath(),
-                "--" + M2FiltersArgumentCollection.TUMOR_SEGMENTATION_LONG_NAME, segments.getAbsolutePath(),
-                "--" + M2FiltersArgumentCollection.CONTAMINATION_TABLE_LONG_NAME, contamination.getAbsolutePath(),
+                //"--" + M2FiltersArgumentCollection.TUMOR_SEGMENTATION_LONG_NAME, segments.getAbsolutePath(),
+                //"--" + M2FiltersArgumentCollection.CONTAMINATION_TABLE_LONG_NAME, contamination.getAbsolutePath(),
                 "--" + FilterMutectCalls.FILTERING_STATS_LONG_NAME, stats.getAbsolutePath()),
                 FilterMutectCalls.class.getSimpleName()));
 
@@ -219,6 +221,26 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
         final File nameFile = createTempFile("sample_name", ".txt");
         new Main().instanceMain(makeCommandLineArgs(Arrays.asList("-I", bam.getAbsolutePath(), "-O", nameFile.getAbsolutePath(), "-encode"), "GetSampleName"));
         return Files.readAllLines(nameFile.toPath()).get(0);
+    }
+
+    @Test
+    public void oneOff() {
+        final File output = createTempFile("output", ".vcf");
+        final String[] callWithPonArgs = {
+                "-I", "gs://5aa919de-0aa0-43ec-9ec3-288481102b6d/tcga/ESCA/DNA/WGS/WUGSC/ILLUMINA/ee6e58f9243e97c6b7acb861103392cc.bam",
+                "-I", "gs://5aa919de-0aa0-43ec-9ec3-288481102b6d/tcga/ESCA/DNA/WGS/WUGSC/ILLUMINA/10731b6615120dca4979fa4a636972c5.bam",
+                "-alleles", "gs://fc-b840f657-b619-46e4-80cf-5973509cefc7/1e8737a1-32fb-448d-80c9-ae2fc92e0a76/mc3/7911e973-ffa8-4f6b-95e6-b15b8a3d9f7a/call-merge/merged.vcf",
+                "--genotyping-mode", "GENOTYPE_GIVEN_ALLELES",
+                "--genotype-filtered-alleles",
+                "-" + M2ArgumentCollection.NORMAL_SAMPLE_SHORT_NAME, "H_NG-IG-A3YB-10A-01D-A247-09",
+                "-R", b37Reference,
+                "-L", "3:164905480-164905816",
+                "-O", output.getAbsolutePath()
+        };
+
+        runCommandLine(callWithPonArgs);
+
+        int h = 9;
     }
 
     @Test(dataProvider = "twoTumorData")
