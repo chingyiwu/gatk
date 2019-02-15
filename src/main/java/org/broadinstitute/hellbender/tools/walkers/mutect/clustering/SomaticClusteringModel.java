@@ -250,11 +250,11 @@ public class SomaticClusteringModel {
 
     private void learnWeightsAndPriors() {
         final double totalVariants = clusterCounts.get(HIGH_AF_INDEX).getValue() + clusterCounts.get(BACKGROUND_INDEX).getValue()
-                + totalSparseClusterCount.getValue() + REGULARIZING_PSEUDOCOUNT * 2;
+                + totalSparseClusterCount.getValue() + REGULARIZING_PSEUDOCOUNT * 3; // high-AF, background, and sparse each get pseudocounts
 
         log10HighAFWeight = Math.log10((REGULARIZING_PSEUDOCOUNT + clusterCounts.get(HIGH_AF_INDEX).getValue()) / totalVariants);
         log10BackgroundWeight = Math.log10((REGULARIZING_PSEUDOCOUNT + clusterCounts.get(BACKGROUND_INDEX).getValue()) / totalVariants);
-        log10SparseClustersWeight = MathUtils.log10OneMinusPow10(MathUtils.log10SumLog10(log10HighAFWeight, log10BackgroundWeight));
+        log10SparseClustersWeight = Math.log10((REGULARIZING_PSEUDOCOUNT + totalSparseClusterCount.getValue()) /totalVariants);
 
         final Map<Integer, Long> variantCountsByIndelLength = IntStream.range(0, data.size())
                 .filter( n -> clusterAssignments.get(n).orElse(SEQUENCING_ERROR_INDEX) != SEQUENCING_ERROR_INDEX)
