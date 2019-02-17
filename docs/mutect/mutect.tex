@@ -190,6 +190,7 @@ are easily obtained from the categorical distribution $q(\vz)$ and the Dirichlet
 The terms in Eq \ref{lagrangian} all involve the standard moments mentioned above, so after a bit of algebraic cancellation we obtain
 \begin{equation}
 \ln P(\mathbb{R} | \mathbb{A}) \approx g(\valpha) - g(\vbeta) +  \sum_{ra} \bar{z}_{ra} \left( \ln \ell_{ra} - \ln \bar{z}_{ra} \right),
+\label{tumor-lod}
 \end{equation}
 where we define $g$ to be the Dirichlet distribution log normalization:
 \begin{equation}
@@ -283,7 +284,10 @@ P({\rm Dirichlet}_{\rm new}) \propto& \pi_{\rm real} \pi_D \frac{ \alpha}{N_D + 
 \end{align}
 where ${\rm D}_j$ denotes the $j$th existing Dirichlet Process cluster, ${\rm Dirichlet}_{\rm new}$ denotes a newly-created Dirichlet cluster, $N_j$ is the number of variants assigned to cluster $j$, and $N_D$ is the total number of variants assigned to Dirichlet clusters.
 
-\code{Mutect2} emits the likelihood ratio between sequencing error and a real variant assuming a flat prior.  However, we can approximately compute the likelihood ratio that a non-flat Beta prior would have produced
+\code{Mutect2} emits the likelihood ratio between sequencing error and a real variant assuming a flat prior.  However, we can approximately compute the likelihood ratio that a non-flat Beta prior would have produced.  We can do this because in Equation \ref{tumor-lod} a change in the prior allele fraction is unlikely to affect $\bar{z}$ very much - usually the allele that a read supports is clear regardless of prior.  Therefore, only the term $g(\valpha) - g(\vbeta)$ changes.  Since $\vbeta = \valpha + \vn$, where $\vn$ is the vector of observed read counts per allele we can convert the log-likelihood obtained with flat prior $\valpha_0$ to one reflecting an allele fraction prior $\valpha$ by adding
+\begin{equation}
+\Delta \ln P(\mathbb{R} | \mathbb{A}) = \left[ g(\valpha) - g(\valpha + \vn) \right] - \left[ g(\valpha_0) - g(\valpha_0 + \vn) \right].
+\end{equation}
 
 
 
