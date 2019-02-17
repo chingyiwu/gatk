@@ -286,8 +286,10 @@ where ${\rm D}_j$ denotes the $j$th existing Dirichlet Process cluster, ${\rm Di
 
 \code{Mutect2} emits the likelihood ratio between sequencing error and a real variant assuming a flat prior.  However, we can approximately compute the likelihood ratio that a non-flat Beta prior would have produced.  We can do this because in Equation \ref{tumor-lod} a change in the prior allele fraction is unlikely to affect $\bar{z}$ very much - usually the allele that a read supports is clear regardless of prior.  Therefore, only the term $g(\valpha) - g(\vbeta)$ changes.  Since $\vbeta = \valpha + \vn$, where $\vn$ is the vector of observed read counts per allele we can convert the log-likelihood obtained with flat prior $\valpha_0$ to one reflecting an allele fraction prior $\valpha$ by adding
 \begin{equation}
-\Delta \ln P(\mathbb{R} | \mathbb{A}) = \left[ g(\valpha) - g(\valpha + \vn) \right] - \left[ g(\valpha_0) - g(\valpha_0 + \vn) \right].
+\Delta {\rm log~odds}(\valpha) = \Delta \ln P(\mathbb{R} | \mathbb{A}) = \left[ g(\valpha) - g(\valpha + \vn) \right] - \left[ g(\valpha_0) - g(\valpha_0 + \vn) \right].
 \end{equation}
+
+Since only \textit{ratios} of likelihoods are meaningful, we may WLOG set the likelihood of reads given sequencing error to be $1$ and then set the likelihood fo each allele fraction cluster to be $\exp \left[ {\rm Mutect2~log~odds} + \Delta {\rm log~odds)(\valpha) \right]$.  The likelihood of a new cluster is the average over all possible new allele fractions of the likelihood, which is, by definition, simply the original \code{Mutect2} likelihood that integrated over a flat prior.  Thus we have likelihoods for every cluster.  Combined with the priors, this gives us the conditional posterior for Gibbs sampling the cluster assignment of a candidate variant.
 
 
 
