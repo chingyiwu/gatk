@@ -161,7 +161,7 @@ To get the log odds we subtract the log likelihood, $\sum_n \ln \epsilon_n$, fro
 %ASSEMBLY AND PAIR-HMM
 %%%%%%%%%%%%%%%
 \subsection{Local Assembly, Pair-HMM, and Realignment}
-These topics, which are common to \code{Mutect2} and HaplotypeCaller, are discussed in docs/local{\_}assembly.pdf, docs/pair{\_}hmm.pdf, and docs/variants{\_}from{\_}haplotypes.pdf in the gatk git repository.  As a black box, whenever the evidence in the previous section suffices to trigger local assembly and realignment, we end up at each candidate variant site with one read-vs-allele log likelihood matrix $\ell$ for each sample, where $ \ell_{ra}$ is the log probability of sequencing read $r$ given its base qualities and given that read $r$ is derived from a molecule exhibiting allele $a$.  \footnote{Technically, pair-HMM produces a read-vs-\textit{haplotype} likelihood matrix, which is then ``marginalized" to produce a set of read-vs-allele likelihood matrices.  In the future, \code{Mutect2} may operate directly on this read-vs-haplotype matrix in order to exploit the biological fact that there are only a few haplotypes in any region.}
+These topics, which are common to \code{Mutect2} and \code{HaplotypeCaller}, are discussed in docs/local{\_}assembly.pdf, docs/pair{\_}hmm.pdf, and docs/variants{\_}from{\_}haplotypes.pdf in the gatk git repository.  As a black box, whenever the evidence in the previous section suffices to trigger local assembly and realignment, we end up at each candidate variant site with one read-vs-allele log likelihood matrix $\ell$ for each sample, where $ \ell_{ra}$ is the log probability of sequencing read $r$ given its base qualities and given that read $r$ is derived from a molecule exhibiting allele $a$.  \footnote{Technically, pair-HMM produces a read-vs-\textit{haplotype} likelihood matrix, which is then ``marginalized" to produce a set of read-vs-allele likelihood matrices.  In the future, \code{Mutect2} may operate directly on this read-vs-haplotype matrix in order to exploit the biological fact that there are only a few haplotypes in any region.}
 
 %%%%%%%%%%%%%%%%%%
 %SOMATIC LIKELIHOODS MODEL
@@ -204,38 +204,46 @@ We now have the model evidence for allele subset $\mathbb{A}$. The \code{TLOD} e
 %%%%%%%
 %%%%%%%
 \section{Filtering}
-Here we describe the command line tool FilterMutectCalls.
+The command line tool \code{FilterMutectCalls} inputs the unfiltered output of \code{Mutect2} and emits another vcf containing the same variants, annotated with the filters that they fail, if any.
+
+\begin{lstlisting}[language=bash,caption={Mutect2 command}, label={cmd-mutect2}]
+gatk FilterMutectCalls -V unfiltered.vcf \
+   # FilterMutectCalls may input segmentation for one or more tumor samples from CalculateContamination
+   [--tumor-segmentation segments1.table] \
+   [--tumor-segmentation segments2.table] \
+    # FilterMutectCalls may input contamination estimates for one or more tumor samples from CalculateContamination
+   [--contamination-table contamination1.table] \
+   [--contamination-table contamination2.table] \
+   -O filtered.vcf
+\end{lstlisting}
+
+The optional inputs from the GATK 4 tool \code{CalculateContamination} are described below.
 
 %%%%%%%%%%
 %ARCHITECTURE
 %%%%%%%%%%
 \subsection{Filtering Architecture}
-\code{FilterMutectCalls} 
-
-\subsubsection{Filtering False Discovery Rate}
-
-Let $p_1 \leq p_2 \leq ... \leq p_n$ denote ordered posterior probabilities that given variants are sequencing artifacts. Suppose we filter variants for which $p_i > p_j$ for some index $j$; that is, we keep the first $j$ variants as \code{PASS} and filter the rest. Then the expected number of false positives is
+\code{FilterMutectCalls} contains a set of filters, each of which computes an error probability for each candidate variant.  The filters are divided into three categories: technical artifacts, non-somatic, and sequencing error.  Roughly, we assume that different types of errors within a category are correlated, while different categories are independent.  For example, whether sequencing errors cause several bases to be misread is independent of whether the DNA being read came from a contaminating sample and of whether an error during library preparation caused a base error prior to sequencing.  To obtain an overall error probability \code{FilterMutectCalls} computes the maximum within categories and an independent product between categories.  That is:
 \begin{equation}
-\mathbb{E} [ \mathrm{FP}(j)] = \sum_{i = 1}^{j} p_i
+P({\rm error}) = 1 - (1 - {\rm max~artifact~error~prob})(1 - {\rm max~non-somatic~prob})(1 - {\rm sequencing~error~prob}).
 \end{equation}
-And the expected false positive rate is
-\begin{equation} \label{eq:fpr}
-\mathbb{E} [ \mathrm{FPR}(j)]= \frac{1}{j} {\sum_{i = 1}^{j} p_i}
-\end{equation}
-We choose the threshold so as to maximize the number of variants to let through while keeping the false positive rate below $\delta \in [0, 1]$. In other words, we solve for
-\begin{equation}
-j^* = \mathrm{argmax}_j \mathbb{E} [ \mathrm{FPR}(j)]= \frac{1}{j} \sum_{i = 1}^{j} p_i
-\end{equation}
-under the constraint $ \mathbb{E} [ \mathrm{FPR}(j)] < \delta$. We can prove by induction that $\mathbb{E} [ \mathrm{FPR}(j)]$ is monotonically increasing in $j$. Thus we test $\mathbb{E} [ \mathrm{FPR}(j)]$ for $j = 1, \cdots, k$, where $k$ is the smallest integer such that $\mathbb{E} [ \rm{FPR}(k)] > \delta$, and set $j^* = k-1$. 
+\code{FilterMutectCalls} goes over an unfiltered vcf in three passes, two to learn any unknown parameters of the filters' models and to set a threshold on $P({\rm error})$, and one to apply the learned filters.  This section describes methods for determining the threshold on error probability.  One option is to simply set a fixed value $p$ on the error probability, below which a call is considered a real somatic variant.  This non-default behavior can be set via \code{--threshold-strategy CONSTANT --initial-threshold <double>}.
 
+\subsubsection{F Score Thresholding}
+\code{FilterMutectCalls} optimizes the F-score -- the harmonic mean of recall and precision -- as its default thresholding strategy.  The \code{--f-score-beta <double>} command line argument can be set to change the relative weight of recall to precision.  In order to optimize the F-score, \code{FilterMutectCalls} sorts all variants by the probability that they are errors, from least to greatest and calculated the F-score for thresholds in which the first $n$ variants pass, starting from $n = 0$ and ending at $n = N$, the total number of candidates.  This is a cheap $O(N)$ computation because initially the expected number of true positive and false positive calls are both zero.  When the threshold increases to admit a variant with error probability $p$, the expected number of true positive calls increases by $1 - p$ and the expected number of false positive calls increases by $p$.  The total expected number of real variants is $\sum_n (1 - p_n)$.  These quantities suffice to calculate recall and precision for every threshold.
+
+\subsubsection{False Discovery Rate Thresholding}
+\code{FilterMutectCalls} can also choose to maximize sensitivity subject to a maximum allowable false discovery rate using the \code{--threshold-strategy FALSE\_DISCOVERY\_RATE --false-discovery-rate <double>}.  For this calculation \code{FilterMutectCalls} also sorts the error probabilities $p_n$ from least to greatest.  If we allow the first $M$ variants to pass the expected false discovery rate is
+\begin{equation}
+\frac{1}{M} \sum_{n = 1}^{M} p_n
+\end{equation}
+This is a non-decreasing function of $M$ because it is the integral from $0$ to $M$ of the monotonic function $p$, hence its derivative with respect to $M$ is $p_M$, which is monotonic.  Thus it is easy to choose the highest $M$ such that the maximum false discovery rate is not exceeded.
 
 %%%%%%%%%
 %HARD FILTERS
 %%%%%%%%%
 \subsection{Hard Filters}
 Several filters are hard filters that assign an error probability of 1 whenever some annotation exceeds a threshold.  Here we summarize all the hard filters of \code{FilterMutectCalls}, the command line parameters that set their thresholds, and an explanation of the thresholded quantity.
-
-
 
 \begin{table}[h!]
 \centering
@@ -383,13 +391,35 @@ where $N_k = \sum_i P(z_{ik} | m_i, c_i)$ is the effective count of loci with ge
 %%%%%%%%%%%%%
 %%%%%%%%%%%%%
 \section{Related GATK Tools}
-The Broad somatics SNVs and indels pipeline involves several GATK tools besides \code{Mutect2} and FilterMutectCalls.  We describe them here.
+The Broad somatics SNVs and indels pipeline involves several GATK tools besides \code{Mutect2} and \code{FilterMutectCalls}.  We describe them here.
 
 
 \subsection{Calculating Contamination}
-Below, we present the GATK's fast, simple, and accurate method for calculating the contamination of a sample.  This methods does not require a matched normal, makes no assumptions about the number of contaminating samples, and remains accurate even when the sample has a lot of copy number variation.
+To calculate the cross-sample calculation of a tumor sample, one runs the GATK tools \code{GetPileupSummaries} and \code{CalculateContamination} as follows:
 
-The inputs to our tool are a bam file and a vcf of common variants -- for example ExAC, gnomAD, or 1000 Genomes -- with their allele frequencies.  The basic idea, which comes from ContEst\footnote{ContEst: estimating cross-contamination of human samples in next-generation sequencing data, \textit{Bioinformatics} \textbf{27}, 2601 (2011)} by Kristian Cibulskis and others in the Broad Institute Cancer Genome Analysis group, is simply to count ref reads at hom alt sites and subtract the number of ref reads expected from sequencing error to obtain the number of ref reads contaminating these hom alt sites.  Finally, we use the allele frequencies to account for the fact that some contaminating reads have the alt allele.  The only subtlety is in distinguishing hom alt sites from loss of heterozygosity events, which we describe below.
+\begin{lstlisting}[language=bash,caption={Mutect2 command}, label={cmd-mutect2}]
+gatk GetPileupSummaries -I tumor.bam \
+   -V common-biallelic.vcf \
+   -L common-biallelic.vcf \
+   -O tumor.pileups
+
+# if a normal is present, it is helpful to obtain its pileup sumaries
+gatk GetPileupSummaries -I normal.bam \
+   -V common-biallelic.vcf \
+   -L common-biallelic.vcf \
+   -O tumor.pileups
+
+gatk CalculateContamination -I tumor.pileups \
+   # the normal pileups are useful but optional
+   [-matched normal.pileups] \
+   -O contamination.table \
+   # it is highly recommended to produce segments for FilterMutectCalls
+   [-tumor-segmentation segments.table]
+\end{lstlisting}
+
+\code{CalculateContamination} is the GATK's fast, simple, and accurate method for calculating the contamination of a sample.  This methods does not require a matched normal, makes no assumptions about the number of contaminating samples, and remains accurate even when the sample has a lot of copy number variation.
+
+The inputs are a bam file and a vcf of common variants -- for example ExAC, gnomAD, or 1000 Genomes -- with their allele frequencies.  The basic idea, which comes from ContEst\footnote{ContEst: estimating cross-contamination of human samples in next-generation sequencing data, \textit{Bioinformatics} \textbf{27}, 2601 (2011)} by Kristian Cibulskis and others in the Broad Institute Cancer Genome Analysis group, is simply to count ref reads at hom alt sites and subtract the number of ref reads expected from sequencing error to obtain the number of ref reads contaminating these hom alt sites.  Finally, we use the allele frequencies to account for the fact that some contaminating reads have the alt allele.  The only subtlety is in distinguishing hom alt sites from loss of heterozygosity events, which we describe below.
 
 Suppose we have a set $\mathbb{H}$ of SNPs at which our sample is homozygous for the alternate allele.  Let $N_{\rm ref}$ be the total number of ref reads at these sites.  We can decompose $N_{\rm ref}$ as follows:
 \begin{align}
@@ -447,7 +477,7 @@ Similar to the spirit of CalculateContamination, the fraction of tumor reads in 
 We propose the following steps to obtain our input of confident somatic SNVs:
 \begin{itemize}
 \item Run \code{Mutect2} with the \code{--genotype-germline-sites} argument to obtain a preliminary list of somatic SNVs, including those that look like germline variants due to tumor-in-normal contamination.  For the sake of speed, we could implement a pileup-based mode in which we skip reassembly and equate read likelihoods with base qualities.  This would allow us to obtain variant annotations using the existing architecture of \code{Mutect2} and therefore to filter calls with no new code.  
-\item Run FilterMutectCalls.  With default settings this eliminates the great majority of sequencing artifacts.  To eliminate even more we could increase the log odds threshold slightly, essentially requiring a slightly larger alt allele count.  Normally we don't do this because it sacrifices some sensitivity, but for our purposes here a 10 or 20 percent loss of sensitivity is perfectly acceptable as long as we are left with enough SNVs for our estimate.  It would also make sense to be especially stringent with variants that have any significant population allele frequency in gnomAD, as well as possible mapping errors.  Thus we might also run FilterAlignmentArtifacts with strict parameters.
+\item Run \code{FilterMutectCalls}.  With default settings this eliminates the great majority of sequencing artifacts.  To eliminate even more we could increase the log odds threshold slightly, essentially requiring a slightly larger alt allele count.  Normally we don't do this because it sacrifices some sensitivity, but for our purposes here a 10 or 20 percent loss of sensitivity is perfectly acceptable as long as we are left with enough SNVs for our estimate.  It would also make sense to be especially stringent with variants that have any significant population allele frequency in gnomAD, as well as possible mapping errors.  Thus we might also run FilterAlignmentArtifacts with strict parameters.
 \item Reconsider all variants that are filtered only by the germline and/or normal artifact filters.  Those that have enough read counts in the normal that we conclude they are germline variants, as opposed to tumor in normal contamination, should remain filtered.  
 \end{itemize}
 
