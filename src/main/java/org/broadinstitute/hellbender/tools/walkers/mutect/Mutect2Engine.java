@@ -65,7 +65,7 @@ public final class Mutect2Engine implements AssemblyRegionEvaluator {
             GATKVCFConstants.GERMLINE_QUAL_VCF_ATTRIBUTE, GATKVCFConstants.CONTAMINATION_QUAL_ATTRIBUTE, GATKVCFConstants.SEQUENCING_QUAL_VCF_ATTRIBUTE,
             GATKVCFConstants.POLYMERASE_SLIPPAGE_QUAL_VCF_ATTRIBUTE,
             GATKVCFConstants.STRAND_QUAL_VCF_ATTRIBUTE, GATKVCFConstants.ORIGINAL_CONTIG_MISMATCH_KEY, GATKVCFConstants.N_COUNT_KEY, GATKVCFConstants.UNIQUE_ALT_READ_SET_COUNT_KEY, GATKVCFConstants.STRAND_ARTIFACT_POSTERIOR_KEY);
-    private static final String MUTECT_VERSION = "2.1";
+    private static final String MUTECT_VERSION = "2.2";
 
     public static final String TUMOR_SAMPLE_KEY_IN_VCF_HEADER = "tumor_sample";
     public static final String NORMAL_SAMPLE_KEY_IN_VCF_HEADER = "normal_sample";

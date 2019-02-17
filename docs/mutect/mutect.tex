@@ -263,6 +263,31 @@ Several filters are hard filters that assign an error probability of 1 whenever 
  \end{tabular}
 \end{table}
 
+%%%%%%%%%%%%%%
+%AF CLUSTERING MODEL
+%%%%%%%%%%%%%%
+\subsection{Allele Fraction Clustering Model}
+Several of \code{FilterMutectCalls}'s probabilistic filters rely on the following graphical model for the tumor's spectrum of allele fractions of real variants.  At the top of the model is a binary indicator for whether a variant is neither a technical artifact or a non-somatic mutation.
+\begin{equation}
+P({\rm consider}) = (1 - {\rm max~artifact~error~prob})(1 - {\rm max~non-somatic~prob}).
+\end{equation}
+Note that possible sequencing errors, with error probability captured by the independent reads assumption of the \code{Mutect2} log odds, \textit{are} considered.  Next, a candidate SNV has prior probability $\pi_{\rm real} = \pi_{\rm SNV} / 3$ to be real and prior probability $1 - \pi{\rm SNV}/3$ to be a sequencing error, while a candidate indel of length $L$ (negative for deletions, positive for insertions) has prior probability $\pi_{\rm real} = \pi_L$ to be real.  Real variants are partitioned according to a mixture model with weights $\pi_{H}$ for a high-allele fraction cluster, $\pi_B$ for a ``background cluster'', and $\pi_{D} = 1 - \pi_H - \pi_B$ to be further clustered into according to a Dirichlet process with concentration $\alpha$.  Each non-error cluster has a characteristic distribution of allele fractions:  ${\rm Beta}(\alpha_H, \beta_H)$ and ${\rm Beta}(\alpha_B, \beta_B)$ for the high-allele fraction and background clusters, and Dirac $\delta$ functions for the Dirichlet clusters.  The idea of this partitioning is that there will usually be sharply-defined allele fractions corresponding to the hets of different subclones, which are captured by the Dirichlet clusters, but that homozygosity and copy-number variation produces deviations from this clustering.
+
+Provided that we stochastically assign a variant to be considered, the (relative) prior probabilities for each possibility are described by a modified Chinese Restaurant Process scheme:
+\begin{align}
+P({\rm Sequencing~error}) \propto& 1 - \pi_{\rm real} \\
+P({\rm High~AF}) \propto& \pi_{\rm real} \pi_H \\
+P({\rm Background}) \propto& \pi_{\rm real} \pi_B \\
+P({\rm Dirichlet}_j) \propto& \pi_{\rm real} \pi_D \frac{ N_j}{N_D + \alpha} \\
+P({\rm Dirichlet}_{\rm new}) \propto& \pi_{\rm real} \pi_D \frac{ \alpha}{N_D + \alpha},
+\end{align}
+where ${\rm D}_j$ denotes the $j$th existing Dirichlet Process cluster, ${\rm Dirichlet}_{\rm new}$ denotes a newly-created Dirichlet cluster, $N_j$ is the number of variants assigned to cluster $j$, and $N_D$ is the total number of variants assigned to Dirichlet clusters.
+
+\code{Mutect2} emits the likelihood ratio between sequencing error and a real variant assuming a flat prior.  However, we can approximately compute the likelihood ratio that a non-flat Beta prior would have produced
+
+
+
+
 %%%%%%%%%%%
 %STRAND ARTIFACT
 %%%%%%%%%%%
