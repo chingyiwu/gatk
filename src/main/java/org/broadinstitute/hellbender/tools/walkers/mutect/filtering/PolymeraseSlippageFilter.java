@@ -45,8 +45,8 @@ public class PolymeraseSlippageFilter extends Mutect2VariantFilter {
             }
             final int depth = (int) MathUtils.sum(ADs);
 
-            // likelihood of a alt reads out of d total reads given uniform prior on allele fraction
-            final double likelihoodGivenRealVariant = 1.0 / (depth + 1);
+            final int altCount = (int) MathUtils.sum(ADs) - ADs[0];
+            final double log10SomaticLikelihood = filteringEngine.getSomaticClusteringModel().log10LikelihoodGivenSomatic(depth, altCount);
 
             double likelihoodGivenSlippageArtifact;
             try {
@@ -56,7 +56,7 @@ public class PolymeraseSlippageFilter extends Mutect2VariantFilter {
                 likelihoodGivenSlippageArtifact = new BinomialDistribution(null, depth, slippageRate).probability(ADs[1]);
             }
 
-            final double log10Odds = Math.log10(likelihoodGivenRealVariant / likelihoodGivenSlippageArtifact);
+            final double log10Odds = log10SomaticLikelihood - Math.log10(likelihoodGivenSlippageArtifact);
             return filteringEngine.posteriorProbabilityOfError(vc, log10Odds, 0);
         } else {
             return 0;
